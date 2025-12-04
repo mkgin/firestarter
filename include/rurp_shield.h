@@ -52,7 +52,7 @@ extern "C" {
 
 #endif
 
-#define ADDRESS_LINE_13             0x20
+#define ADDRESS_LINE_13             0x20    // Bit mask for maximum address pins in 24 pin ROM
 
 #define VPP_P1_32_DIP               0x15
 #define VPP_P1_28_DIP               0x0F

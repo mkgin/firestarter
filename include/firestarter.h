@@ -69,6 +69,7 @@ typedef struct bus_config {
     uint8_t matching_lines;                     // Number of matching address lines
     uint8_t rw_line;                            // RW line mapping
     uint8_t vpp_line;                           // VPP line mapping
+    // uint8_t ce_line;                           // CE line (by default pin 20 DIP-24 but not always )
 } bus_config_t;
 
 typedef struct firestarter_handle {

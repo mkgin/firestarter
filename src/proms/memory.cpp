@@ -96,7 +96,8 @@ rurp_register_t mem_util_calculate_lsb_register(firestarter_handle_t* handle, ui
 rurp_register_t mem_util_calculate_msb_register(firestarter_handle_t* handle, uint32_t address) {
     uint8_t msb = ((address >> 8) & 0xFF);
     if (handle->pins == 24) {
-        msb |= ADDRESS_LINE_13;
+        msb |= ADDRESS_LINE_13; // Mask off unneeded bits 64 kbit ROMs. Unlikely there are 24 Pin roms with more
+        // TMS2532 A11-CE CHANGES
     }
     return msb;
 }
@@ -124,6 +125,8 @@ void mem_util_set_address(firestarter_handle_t* handle, uint32_t address) {
     uint8_t lsb = mem_util_calculate_lsb_register(handle, address);
     rurp_write_to_register(LEAST_SIGNIFICANT_BYTE, lsb);
 
+    // Call mem_util_calculate_msb_register with masked address
+    // Set CE according to A11
     uint8_t msb = mem_util_calculate_msb_register(handle, address);
     rurp_write_to_register(MOST_SIGNIFICANT_BYTE, msb);
 
@@ -131,6 +134,7 @@ void mem_util_set_address(firestarter_handle_t* handle, uint32_t address) {
     rurp_write_to_register(CONTROL_REGISTER, top_address);
 
 #ifdef DEBUG_ADDRESS
+    // Note Here if munging address and CE
     debug_format("top msb lsb %02x %02x %02x", top_address, msb, lsb);
 #endif
 }
@@ -147,15 +151,18 @@ void memory_read_execute(firestarter_handle_t* handle) {
 }
 
 uint8_t memory_get_data(firestarter_handle_t* handle, uint32_t address) {
-    rurp_chip_output();
+    rurp_chip_output(); // IF there is NO CE this should be done after the address is set
+
     address = mem_util_remap_address_bus(handle, address, READ_FLAG);
 
     handle->firestarter_set_address(handle, address);
-    rurp_set_data_input();
-    rurp_chip_enable();
-    delayMicroseconds(3);
+    rurp_set_data_input(); // IF there is NO CE , OE( aka PD/PGM ) is useds, this should be active low
+
+
+    rurp_chip_enable();  // IF there is NO CE the OE( aka PD/PGM ) should be used
+    delayMicroseconds(3); 
     uint8_t data = rurp_read_data_buffer();
-    rurp_chip_disable();
+    rurp_chip_disable(); // IF there is NO CE the OE( aka PD/PGM ) should be used
 
     return data;
 }
@@ -167,15 +174,15 @@ void memory_write_execute(firestarter_handle_t* handle) {
 }
 
 void memory_set_data(firestarter_handle_t* handle, uint32_t address, uint8_t data) {
-    rurp_chip_input();
+    rurp_chip_input(); // IF there is NO CE this is set to LOW when programming
     address = mem_util_remap_address_bus(handle, address, WRITE_FLAG);
 
     handle->firestarter_set_address(handle, address);
     rurp_write_data_buffer(data);
     delayMicroseconds(3);  // Needed for slower address changes like slow ROMs and "Power through address lines"
-    rurp_chip_enable();
+    rurp_chip_enable();  // IF there is NO CE the OE( aka PD/PGM ) should be used
     delayMicroseconds(handle->pulse_delay);
-    rurp_chip_disable();
+    rurp_chip_disable(); // IF there is NO CE the OE( aka PD/PGM ) should be used
 }
 
 void memory_verify_execute(firestarter_handle_t* handle) {
@@ -190,6 +197,8 @@ void memory_verify_execute(firestarter_handle_t* handle) {
 }
 
 // Utility functions
+
+// What the Best way to handle this part?
 uint32_t mem_util_remap_address_bus(const firestarter_handle_t* handle, uint32_t address, uint8_t read_write) {
     bus_config_t config = handle->bus_config;
     uint32_t reorg_address = config.address_mask & address;
@@ -205,7 +214,6 @@ uint32_t mem_util_remap_address_bus(const firestarter_handle_t* handle, uint32_t
     if (config.rw_line != 0xFF) {
         reorg_address |= (uint32_t)read_write << config.rw_line;
     }
-
     // Set VPP line to high if VPP is not on P1
     if (config.vpp_line != 0xFF && !using_p1_as_vpp(handle)) {
         reorg_address |= 1UL << config.vpp_line;
